@@ -4,7 +4,6 @@ import subprocess
 import glob
 import shutil
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
 
 def process_csv(path):
     """
@@ -85,8 +84,7 @@ def blast_fasta_generator(rec_seq,pep_seq,pdb):
         file.write(f">pep_{pdb}\n")
         file.write(str(pep_seq))
 
-
-def blasp_launch(pdb, fasta, db, output, num_threads, evalue, max_runs):
+def blasp_launch(pdb,fasta, db, output ,num_threads ,evalue):
     """
     Launch a BLASTP search.
 
@@ -107,35 +105,22 @@ def blasp_launch(pdb, fasta, db, output, num_threads, evalue, max_runs):
         The number of threads to use for the BLASTP search.
     evalue : float
         The e-value threshold for reporting matches.
-    max_runs : int
-        The maximum number of concurrent BLASTP jobs.
 
     Returns
     -------
     None
     """
-
+    
     BLASTP_BIN = shutil.which('blastp')
     if BLASTP_BIN is None:
-        print('blastp could not be found')
-        return
+        print('blastp could not be founded')
 
-    command_line = [
-        BLASTP_BIN, '-query', fasta, '-db', db, '-out', output,
-        '-outfmt', '10', '-num_threads', str(num_threads), '-evalue', str(evalue)
-    ]
+    command_line = [BLASTP_BIN,'-query',
+                    fasta,'-db',db ,'-out',
+                    output,'-outfmt', '10', '-num_threads', str(num_threads), '-evalue', str(evalue)]
+    subprocess.Popen(command_line)
 
-    def run():
-        subprocess.run(command_line)
-        print(f'BLASTP job finished for {fasta}')
-
-    with ThreadPoolExecutor(max_workers=max_runs) as executor:
-        futures = [executor.submit(run) for _ in range(max_runs)]
-        for future in futures:
-            future.result()  # Wait for all futures to complete
-
-
-def blastp(df, db, evalue,num_threads , pep=True, rec=False, max_runs=10):
+def blastp (df, db, evalue,num_threads , pep=True, rec=False):
     """
     Generate and run BLASTP searches for sequences in a DataFrame.
 
@@ -156,8 +141,6 @@ def blastp(df, db, evalue,num_threads , pep=True, rec=False, max_runs=10):
         If True, perform BLASTP search on peptide sequences (default is True).
     rec : bool, optional
         If True, perform BLASTP search on receptor sequences (default is False).
-    max_runs : int
-        The maximum number of concurrent BLASTP jobs (10 by default).
 
     Returns
     -------
@@ -169,10 +152,10 @@ def blastp(df, db, evalue,num_threads , pep=True, rec=False, max_runs=10):
         if pep:
             fasta= f'pep_{pdb}.fa'
             output=f'out_pep_{pdb}.csv'
-            blasp_launch(pdb, fasta, db, output ,str(num_threads),str(evalue) , int(max_runs))
+            blasp_launch(pdb, fasta, db, output ,str(num_threads),str(evalue))
         if rec: 
             fasta= f'rec_{pdb}.fa'
             output=f'out_rec_{pdb}.csv'
-            blasp_launch(pdb, fasta, db, output ,str(num_threads),str(evalue), int(max_runs))
+            blasp_launch(pdb, fasta, db, output ,str(num_threads),str(evalue))
         else : 
             print("No blast type selected")
