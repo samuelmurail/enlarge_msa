@@ -20,7 +20,7 @@ def process_csv(path):
     Returns
     -------
     df : pandas.DataFrame or None
-        DataFrame containing columns 'pdb', 'rec_seq', and 'pep_seq' if the CSV file is processed successfully.
+        An alphafold input DataFrame containing pdb id , receptor and peptides sequences if the CSV file is processed successfully.
         None if there is an issue with the CSV file.
     """
     AF_seq = pd.read_csv(path)
@@ -130,7 +130,7 @@ def blastp (df, db, evalue,num_threads , pep=True, rec=False):
     Parameters
     ----------
     df : pandas.DataFrame
-        DataFrame containing columns 'rec_seq', 'pep_seq', and 'pdb'.
+        An alphafold input DataFrame containing pdb id , receptor and peptides sequences.
     db : str
         The path to the BLAST database to be searched against.
     evalue : float
