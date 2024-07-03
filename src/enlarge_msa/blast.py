@@ -136,7 +136,7 @@ def blasp_launch(pdb, fasta, db, output, num_threads, evalue, semaphore):
 
         command_line = [
             BLASTP_BIN, '-query', fasta, '-db', db, '-out', output,
-            '-outfmt', '10', '-num_threads', str(num_threads), '-evalue', str(evalue)
+            '-num_threads', str(num_threads), '-evalue', str(evalue) ,'-outfmt', '10 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen gaps qcovs'
         ]
         subprocess.run(command_line)
 
@@ -247,23 +247,23 @@ def tmp_results(csv_path, seq, db):
     
     tmp_df=None
     column_names = ["query", "subject_id", "% identity", "alignment_length", "mismatches", 
-                "gap_open", "q_start", "q_end", "s_start", "s_end", "evalue", "bit_score"]
+                "gap_open", "q_start", "q_end", "s_start", "s_end", "evalue", "bit_score" ,"query_len" , "subj_len" , "gaps" , "qcovs"]
     coverage = []
     seqs = []
     tmp_df = pd.read_csv(csv_path, names=column_names)
-    if tmp_df is not None :
-        coverage = [(int(i) / len(seq)) * 100 for i in tmp_df["alignment_length"].tolist()]
-        tmp_df["coverage %"] = coverage
+    #if tmp_df is not None :
+    #    coverage = [(int(i) / len(seq)) * 100 for i in tmp_df["alignment_length"].tolist()]
+    #    tmp_df["coverage %"] = coverage
         
-        for query in tmp_df["subject_id"].tolist():
-            new_seq = blastdbcmd(query, db)
-            if new_seq:
-                seqs.append(new_seq)
-            else:
-                seqs.append("")  # Handle case where no sequence is found
-        
-        tmp_df["sequence"] = seqs
-        tmp_df["sequence_length"] = [len(i) for i in seqs]
+    for query in tmp_df["subject_id"].tolist():
+        new_seq = blastdbcmd(query, db)
+        if new_seq:
+            seqs.append(new_seq)
+        else:
+            seqs.append("") 
+    
+    tmp_df["sequence"] = seqs
+    #tmp_df["sequence_length"] = [len(i) for i in seqs]
     
     return tmp_df
 
@@ -291,9 +291,9 @@ def best_seq(tmp_df):
     if tmp_df.empty:
         return ""  # Return an empty string or handle appropriately
 
-    max_coverage = tmp_df['coverage %'].max()
-    max_coverage_df = tmp_df[tmp_df['coverage %'] == max_coverage]
-    sequence_with_max_coverage_and_length = tmp_df.loc[max_coverage_df['sequence_length'].idxmax()]
+    max_coverage = tmp_df['qcovs'].max()
+    max_coverage_df = tmp_df[tmp_df['qcovs'] == max_coverage]
+    sequence_with_max_coverage_and_length = tmp_df.loc[max_coverage_df['subj_len'].idxmax()]
     
     query = sequence_with_max_coverage_and_length["query"]
     best_id = sequence_with_max_coverage_and_length["subject_id"]
@@ -437,7 +437,4 @@ def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_files=False, ge
     output_mmseq = os.path.join(output_folder, f"mmseq.csv")
     mmseq_df.to_csv(output_mmseq, index=False)
     
-
-
-
 
