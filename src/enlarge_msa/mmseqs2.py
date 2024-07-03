@@ -131,6 +131,17 @@ def write_unpaired_alignement(
             f"seq {i:2} : keep {len(seq_list):5} sequences in the unpaired alignement"
         )
 
+def insert_seq(seq_ori, seq_new, gap_cost=-15):
+    assert len(seq_new) > len(seq_ori)
+    align = alignement.align_seq_cython(seq_ori, seq_new, gap_cost) 
+
+    for insert_num in range(len(align[0])):
+        if align[0][insert_num] != "-":
+            break
+    print(insert_num)
+    
+    seq_new = seq_new[:insert_num]+seq_ori+seq_new[len(seq_ori)+insert_num:]
+    return seq_new
 
 def create_full_alignement(
     name,
