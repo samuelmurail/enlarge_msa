@@ -9,7 +9,7 @@ from multiprocessing.dummy import Pool
 from concurrent.futures import ThreadPoolExecutor
 from threading import Semaphore
 
-def process_csv(path):
+def process_csv(csv_path):
     """
     Prepare a DataFrame from an Alphafold input CSV file.
 
@@ -18,7 +18,7 @@ def process_csv(path):
 
     Parameters
     ----------
-    path : str
+    csv_path : str
         The path to the Alphafold input CSV file.
 
     Returns
@@ -27,35 +27,35 @@ def process_csv(path):
         DataFrame containing columns 'pdb', 'rec_seq', and 'pep_seq' if the CSV file is processed successfully.
         None if there is an issue with the CSV file.
     """
-    AF_seq = pd.read_csv(path)
+    AF_df = pd.read_csv(csv_path)
     
     pep_seq = []
-    rec_seq = []
-    original_rec_seq=[]
-    pdb_list = AF_seq["id"].tolist()
+    unique_rec_seq = []
+    full_rec_seq=[]
+    pdb_list = AF_df["id"].tolist()
     
-    for seq in AF_seq["sequence"].tolist():
+    for seq in AF_df["sequence"].tolist():
         pep = seq.split(":")[-1]
         rec = seq.split(":")[0:-1]
         if len(rec)!= len(set(rec)):
-            original_rec_seq.append(rec)
+            full_rec_seq.append(rec)
         else : 
-            original_rec_seq.append(None)
+            full_rec_seq.append(None)
         pep_seq.append(pep)
-        rec_seq.append(pd.unique(np.array(rec)).tolist())
+        unique_rec_seq.append(pd.unique(np.array(rec)).tolist())
     
-    if len(pep_seq) == len(rec_seq) == len(pdb_list):
+    if len(pep_seq) == len(unique_rec_seq) == len(pdb_list):
         data = {
             "pdb": pdb_list,
-            "original_rec_seq":original_rec_seq,
-            "rec_seq": rec_seq,
+            "full_rec_seq":full_rec_seq,
+            "unique_rec_seq": unique_rec_seq,
             "pep_seq": pep_seq,
         }
         
         df = pd.DataFrame(data)
         return df
     else:
-        print("Error: problem with the csv.")
+        print(f"Error: problem with the csv. \n")
         return None
         
 def blast_fasta_generator(rec_seq,pep_seq,pdb):
@@ -79,12 +79,12 @@ def blast_fasta_generator(rec_seq,pep_seq,pdb):
     -------
     None
     """
-    folder_name = '.'
+    folder_name = './fasta_files'
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
     
     pep_file_path = os.path.join(folder_name, f"pep_{pdb}.fa")
-    print(f"Preparing pep_{pdb} FASTA file\n")
+    print(f"Preparing peptide FASTA file of {pdb} \n")
     
     with open(pep_file_path, "w") as file:
         file.write(f">pep_{pdb}\n")
@@ -92,15 +92,13 @@ def blast_fasta_generator(rec_seq,pep_seq,pdb):
         
     for i, seq in enumerate(rec_seq):
         rec_file_path = os.path.join(folder_name, f"rec_{pdb}_{i}.fa")
-        print(f"Preparing rec_{pdb}_{i} FASTA file\n")
+        print(f"Preparing receptor FASTA file of {pdb} \n")
         
         with open(rec_file_path, "w") as file:
             file.write(f">rec_{pdb}_{i}\n")
             file.write(seq)
-    
-
-
-def blasp_launch(pdb, fasta, db, output, num_threads, evalue, semaphore):
+            
+def blasp_launch(fasta, db, output, num_threads, evalue,semaphore):
     """
     Launch a BLASTP search.
 
@@ -109,8 +107,6 @@ def blasp_launch(pdb, fasta, db, output, num_threads, evalue, semaphore):
 
     Parameters
     ----------
-    pdb : str
-        The PDB of the query associated with the input FASTA file.
     fasta : str
         The path to the input FASTA file containing the sequence to be queried.
     db : str
@@ -131,7 +127,7 @@ def blasp_launch(pdb, fasta, db, output, num_threads, evalue, semaphore):
     with semaphore:
         BLASTP_BIN = shutil.which('blastp')
         if BLASTP_BIN is None:
-            print('blastp could not be found')
+            print(f'blastp could not be found \n')
             return
 
         command_line = [
@@ -139,7 +135,7 @@ def blasp_launch(pdb, fasta, db, output, num_threads, evalue, semaphore):
             '-num_threads', str(num_threads), '-evalue', str(evalue) ,'-outfmt', '10 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen gaps qcovs'
         ]
         subprocess.run(command_line)
-
+        
 def blastp(df, db, evalue, num_threads, pep=True, rec=False, max_runs=5):
     """
     Generate and run BLASTP searches for sequences in a DataFrame.
@@ -172,20 +168,34 @@ def blastp(df, db, evalue, num_threads, pep=True, rec=False, max_runs=5):
     tasks_pep = []
     tasks_rec = []
 
-    for rec_seq, pep_seq, pdb in zip(df["rec_seq"], df["pep_seq"], df["pdb"]):
+    fasta_folder = './fasta_files'
+    if not os.path.exists(fasta_folder):
+        print(f"Fasta files folder is missing \n")
+
+    blast_output = './blast_output'
+    if not os.path.exists(blast_output):
+        os.makedirs(blast_output)
+
+    for rec_seq, pep_seq, pdb in (zip(df["unique_rec_seq"], df["pep_seq"], df["pdb"])):
         blast_fasta_generator(rec_seq, pep_seq, pdb)  
         if pep:
-            tasks_pep.append((pdb, f'pep_{pdb}.fa', db, f'out_pep_{pdb}.csv', num_threads, evalue, semaphore))
+            print(f"Running BLASTp for peptide of: {pdb} \n")
+            pep_file_path = os.path.join(fasta_folder, f"pep_{pdb}.fa")
+            pep_blast_output=os.path.join(blast_output, f'out_pep_{pdb}.csv')
+            tasks_pep.append((pep_file_path, db, pep_blast_output, num_threads, evalue, semaphore))
+
         if rec:
+            print(f"Running BLASTp for receptors of :{pdb} \n")
             for i, seq in enumerate(rec_seq):
-                tasks_rec.append((pdb, f'rec_{pdb}_{i}.fa', db, f'out_rec_{pdb}_{i}.csv', num_threads, evalue, semaphore))
+                rec_file_path = os.path.join(fasta_folder, f"rec_{pdb}_{i}.fa")
+                rec_blast_output=os.path.join(blast_output, f'out_rec_{pdb}_{i}.csv')
+                tasks_rec.append((rec_file_path, db, rec_blast_output, num_threads, evalue, semaphore))
                 
     with ThreadPoolExecutor(max_workers=max_runs) as executor:
         if pep:
             executor.map(lambda p: blasp_launch(*p), tasks_pep)
         if rec:
             executor.map(lambda p: blasp_launch(*p), tasks_rec)
-
 
 def blastdbcmd(query, db):
     """
@@ -209,25 +219,28 @@ def blastdbcmd(query, db):
     
     Blastdbcmd_BIN = shutil.which('blastdbcmd')
     if Blastdbcmd_BIN is None:
-        print('blastdbcmd could not be founded')
+        print(f'blastdbcmd could not be found \n')
+        return ""
         
-    command_line = [Blastdbcmd_BIN,'-db',db ,'-entry',
-                    query]
+    command_line = [Blastdbcmd_BIN, '-db', db, '-entry', query]
     result = subprocess.run(command_line, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print(f"Error running blastdbcmd: {result.stderr} \n")
+        return ""
+    
     lines = result.stdout.splitlines()
-    seq = lines[1] if len(lines) > 1 else ""
+    seq = "".join(lines[1:]) if len(lines) > 1 else ""
 
     return seq
+    
+def process_blast_results(csv_path, seq, db):
 
-
-
-def tmp_results(csv_path, seq, db):
     """
-    Treat BLAST results and augment with coverage percentage and sequences.
+    Treat BLAST results and augment with sequences.
 
-    This function reads a CSV file of BLAST search results, calculates the coverage percentage 
-    for each alignment, retrieves the corresponding sequences from the BLAST searched database, and adds 
-    these sequences and their lengths to the DataFrame.
+    This function reads a CSV file of BLAST search results and retrieves the corresponding 
+    sequences from the BLAST searched database, and adds these sequences to the DataFrame.
 
     Parameters
     ----------
@@ -241,34 +254,33 @@ def tmp_results(csv_path, seq, db):
     Returns
     -------
     pd.DataFrame
-        A DataFrame containing the original BLAST search results, with additional columns for 
-        coverage percentage, sequences, and sequence lengths.
+        A DataFrame containing the original BLAST search results, with additional column for 
+        sequences.
     """
     
-    tmp_df=None
+    blastp_df=None
     column_names = ["query", "subject_id", "% identity", "alignment_length", "mismatches", 
                 "gap_open", "q_start", "q_end", "s_start", "s_end", "evalue", "bit_score" ,"query_len" , "subj_len" , "gaps" , "qcovs"]
-    coverage = []
-    seqs = []
-    tmp_df = pd.read_csv(csv_path, names=column_names)
-    #if tmp_df is not None :
-    #    coverage = [(int(i) / len(seq)) * 100 for i in tmp_df["alignment_length"].tolist()]
-    #    tmp_df["coverage %"] = coverage
+    #coverage = []
+    seq_list = []
+    blastp_df = pd.read_csv(csv_path, names=column_names)
+    #if blastp_df is not None :
+    #    coverage = [(int(i) / len(seq)) * 100 for i in blastp_df["alignment_length"].tolist()]
+    #    blastp_df["coverage %"] = coverage
         
-    for query in tmp_df["subject_id"].tolist():
+    for query in blastp_df["subject_id"].tolist():
         new_seq = blastdbcmd(query, db)
         if new_seq:
-            seqs.append(new_seq)
+            seq_list.append(new_seq)
         else:
-            seqs.append("") 
+            seq_list.append("") 
     
-    tmp_df["sequence"] = seqs
-    #tmp_df["sequence_length"] = [len(i) for i in seqs]
+    blastp_df["sequence"] = seq_list
+    #blastp_df["sequence_length"] = [len(i) for i in seq_list]
     
-    return tmp_df
+    return blastp_df
 
-
-def best_seq(tmp_df):
+def best_seq(blastp_df):
     """
     Identify and return the best sequence based on maximum coverage and sequence length.
 
@@ -277,9 +289,8 @@ def best_seq(tmp_df):
 
     Parameters
     ----------
-    tmp_df : pd.DataFrame
-        The DataFrame containing BLAST search results with additional columns for coverage percentage 
-        and sequence information.
+    blastp_df : pd.DataFrame
+        The DataFrame containing BLAST search results with additional column for sequence information.
 
     Returns
     -------
@@ -288,21 +299,20 @@ def best_seq(tmp_df):
         string if the DataFrame is empty.
     """
     
-    if tmp_df.empty:
-        return ""  # Return an empty string or handle appropriately
+    if blastp_df.empty:
+        return ""
 
-    max_coverage = tmp_df['qcovs'].max()
-    max_coverage_df = tmp_df[tmp_df['qcovs'] == max_coverage]
-    sequence_with_max_coverage_and_length = tmp_df.loc[max_coverage_df['subj_len'].idxmax()]
+    max_coverage = blastp_df['qcovs'].max()
+    max_coverage_df = blastp_df[blastp_df['qcovs'] == max_coverage]
+    sequence_with_max_coverage_and_length_df = blastp_df.loc[max_coverage_df['subj_len'].idxmax()]
     
-    query = sequence_with_max_coverage_and_length["query"]
-    best_id = sequence_with_max_coverage_and_length["subject_id"]
-    new_seq = sequence_with_max_coverage_and_length["sequence"]
+    #query = sequence_with_max_coverage_and_length["query"]
+    #best_id = sequence_with_max_coverage_and_length["subject_id"]
+    new_seq = sequence_with_max_coverage_and_length_df["sequence"]
 
     return new_seq
 
-
-def reconstruct(original_rec, rec_seq, new_rec):
+def reconstruct(full_rec_seq, unique_rec_seq, new_rec_seq):
     """
     Reconstruction of a sequence.
 
@@ -312,11 +322,11 @@ def reconstruct(original_rec, rec_seq, new_rec):
 
     Parameters
     ----------
-    original_rec : list of str
+    full_rec_seq : list of str
         The original sequence containing repetitive segments to be replaced.
-    rec_seq : list of str
+    unique_rec_seq : list of str
         A list of unique segments obtained from the original sequence.
-    new_rec : list of str
+    new_rec_seq : list of str
         A list of new sequences that will replace the corresponding segments in the original one.
 
     Returns
@@ -326,21 +336,21 @@ def reconstruct(original_rec, rec_seq, new_rec):
         
     Examples
     --------
-    >>> original_rec = ['A', 'B', 'A']
-    >>> rec_seq = ['A', 'B']
-    >>> new_rec = ['X', 'Y']
-    >>> reconstruct(original_rec, rec_seq, new_rec)
+    >>> full_rec_seq = ['A', 'B', 'A']
+    >>> unique_rec_seq = ['A', 'B']
+    >>> new_rec_seq = ['X', 'Y']
+    >>> reconstruct(full_rec_seq, unique_rec_seq, new_rec_seq)
     ['X', 'Y', 'X']
     """
 
     reconstructed_seq = []
-    for seq in original_rec:
-        for unique_seq, new_seq in zip(rec_seq, new_rec):
+    for seq in full_rec_seq:
+        for unique_seq, new_seq in zip(unique_rec_seq, new_rec_seq):
             if seq == unique_seq:
                 reconstructed_seq.append(new_seq)    
     return reconstructed_seq
 
-def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_files=False, generate_tmp_rec_files=False):
+def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_df=False, generate_tmp_rec_df=False):
     """
     Perform BLAST analysis.
     This function runs a BLAST analysis on sequences from a DataFrame and generate output files used for mmseqs MSA search. 
@@ -355,9 +365,9 @@ def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_files=False, ge
         Whether to perform analysis on peptide sequences (default True).
     rec : bool, optional
         Whether to perform analysis on nucleotide sequences (default False).
-    generate_tmp_pep_files : bool, optional
+    generate_tmp_pep_df : bool, optional
         Whether to generate temporary output files for peptide sequences (default False).
-    generate_tmp_rec_files : bool, optional
+    generate_tmp_rec_df : bool, optional
         Whether to generate temporary output files for nucleotide sequences (default False).
 
     Returns
@@ -366,61 +376,65 @@ def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_files=False, ge
         DataFrame containing additional information where for each pdb, the best sequence 
         with the highest coverage and length for the receptor and peptide.
     """
-    
-    output_folder = 'blast_analysis'
+    print("Ruuning blast analysis")
+    output_folder = './blast_analysis'
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     
+    blast_output = './blast_output'
+    if not os.path.exists(blast_output):
+        print(f"Blastp output folder is missing \n")
+
+
     query = []
     original_rec_seq = []
     original_pep_seq = []
     new_rec_seq = []
     new_pep_seq = []
     
-    for original_rec,rec_seq, pep_seq, pdb in tqdm(zip(df["original_rec_seq"],df["rec_seq"], df["pep_seq"], df["pdb"])):
-        tmp_rec = None  
-        tmp_pep = None  
+    for full_rec, unique_rec, pep_seq, pdb in tqdm(zip(df["full_rec_seq"], df["unique_rec_seq"], df["pep_seq"], df["pdb"]), total=len(df)):
+        tmp_rec_df = None  
+        tmp_pep_df = None  
         new_rec=[]
 
         if pep:
-            csv_path = f"out_pep_{pdb}.csv"
-            tmp_pep = tmp_results(csv_path, pep_seq, db)
-            if generate_tmp_pep_files:
-                output_file_pep = os.path.join(output_folder, f"tmp_pep_{pdb}.csv")
-                tmp_pep.to_csv(output_file_pep, index=False)
-            if tmp_pep is not None:
-                best_pep = best_seq(tmp_pep)
+            pep_csv_path = os.path.join(blast_output, f"out_pep_{pdb}.csv")
+            tmp_pep_df = process_blast_results(pep_csv_path, pep_seq, db)
+            if generate_tmp_pep_df:
+                print(f"Generating blast analysis results of {pdb} peptide \n")
+                output_file_pep = os.path.join(output_folder, f"tmp_pep_df_{pdb}.csv")
+                tmp_pep_df.to_csv(output_file_pep, index=False)
+            if tmp_pep_df is not None:
+                best_pep = best_seq(tmp_pep_df)
                 new_pep_seq.append(best_pep)
             else:
                 new_pep_seq.append("") 
 
-        #######     
         if rec :
-            for i, seq in enumerate(rec_seq):
-                csv_path = f"out_rec_{pdb}_{i}.csv"
-                tmp_rec = tmp_results(csv_path, seq, db)
-                if generate_tmp_rec_files:
-                    output_file_rec = os.path.join(output_folder, f"tmp_rec_{pdb}_{i}.csv")
-                    tmp_rec.to_csv(output_file_rec, index=False)
+            for i, seq in enumerate(unique_rec):
+                rec_csv_path = os.path.join(blast_output, f"out_rec_{pdb}_{i}.csv")
+                tmp_rec_df = process_blast_results(rec_csv_path, seq, db)
+                if generate_tmp_rec_df:
+                    print(f"Generating blast analysis results of {pdb} receptor \n ")
+                    output_file_rec = os.path.join(output_folder, f"tmp_rec_df_{pdb}_{i}.csv")
+                    tmp_rec_df.to_csv(output_file_rec, index=False)
                 
-                if tmp_rec is None:
+                if tmp_rec_df is None:
                     new_rec_seq.append("")
                 else:
-                    best_rec = best_seq(tmp_rec)
+                    best_rec = best_seq(tmp_rec_df)
                     new_rec.append(best_rec)
-                    
-            if original_rec is None :
-                original_rec_seq.append(rec_seq)
+            if full_rec is None :
+                original_rec_seq.append(unique_rec)
                 new_rec_seq.append(new_rec)
             else:
-                original_rec_seq.append(original_rec)
-                new_rec_seq.append(reconstruct(original_rec,rec_seq,new_rec))
-                
+                original_rec_seq.append(full_rec)
+                new_rec_seq.append(reconstruct(full_rec,unique_rec,new_rec))
         query.append(pdb)
         original_pep_seq.append(pep_seq)        
     
     
-
+    print(f"Preparing mmseq csv file \n")
     data = {
         "pdb": query,
         "original_rec_seq": original_rec_seq,
@@ -437,4 +451,3 @@ def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_files=False, ge
     output_mmseq = os.path.join(output_folder, f"mmseq.csv")
     mmseq_df.to_csv(output_mmseq, index=False)
     
-
