@@ -261,13 +261,8 @@ def process_blast_results(csv_path, seq, db):
     blastp_df=None
     column_names = ["query", "subject_id", "% identity", "alignment_length", "mismatches", 
                 "gap_open", "q_start", "q_end", "s_start", "s_end", "evalue", "bit_score" ,"query_len" , "subj_len" , "gaps" , "qcovs"]
-    #coverage = []
     seq_list = []
-    blastp_df = pd.read_csv(csv_path, names=column_names)
-    #if blastp_df is not None :
-    #    coverage = [(int(i) / len(seq)) * 100 for i in blastp_df["alignment_length"].tolist()]
-    #    blastp_df["coverage %"] = coverage
-        
+    blastp_df = pd.read_csv(csv_path, names=column_names)        
     for query in blastp_df["subject_id"].tolist():
         new_seq = blastdbcmd(query, db)
         if new_seq:
@@ -275,9 +270,7 @@ def process_blast_results(csv_path, seq, db):
         else:
             seq_list.append("") 
     
-    blastp_df["sequence"] = seq_list
-    #blastp_df["sequence_length"] = [len(i) for i in seq_list]
-    
+    blastp_df["sequence"] = seq_list    
     return blastp_df
 
 def best_seq(blastp_df):
@@ -305,9 +298,6 @@ def best_seq(blastp_df):
     max_coverage = blastp_df['qcovs'].max()
     max_coverage_df = blastp_df[blastp_df['qcovs'] == max_coverage]
     sequence_with_max_coverage_and_length_df = blastp_df.loc[max_coverage_df['subj_len'].idxmax()]
-    
-    #query = sequence_with_max_coverage_and_length["query"]
-    #best_id = sequence_with_max_coverage_and_length["subject_id"]
     new_seq = sequence_with_max_coverage_and_length_df["sequence"]
 
     return new_seq
@@ -439,8 +429,6 @@ def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_df=False, gener
         "pdb": query,
         "original_rec_seq": original_rec_seq,
         "original_pep_seq": original_pep_seq,
-       #"new_rec_seq": new_rec_seq,
-       #"new_pep_seq": new_pep_seq
     }
     mmseq_df = pd.DataFrame(data)
     if pep :
