@@ -1,6 +1,7 @@
 from colabfold.colabfold import run_mmseqs2
 import importlib_metadata
 from pathlib import Path
+from pdb_numpy import alignement
 
 AA_CLASSIC = "-XRHKDESTNQCGPAVILSMFYW"
 
