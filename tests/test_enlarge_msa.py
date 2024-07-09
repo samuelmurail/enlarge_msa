@@ -3,9 +3,11 @@
 """Tests for `enlarge_msa` package."""
 
 import pytest
+import sys
+sys.path.insert(0, "src/")
 
 
-from enlarge_msa import enlarge_msa
+from enlarge_msa import blast
 
 
 @pytest.fixture

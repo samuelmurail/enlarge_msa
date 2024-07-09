@@ -72,11 +72,14 @@ def write_paired_alignement(f_out, a3m_lines_mmseqs2, start_indice, end_indice):
                 title += "\t" + a3m_lines_list[i][j][1:]
         elif a3m_lines_list[0][j]:
             seq = ""
+            only_insert_num = 0
             for i in range(len(a3m_lines_list)):
-                seq += "".join([aa for aa in a3m_lines_list[i][j] if aa in AA_CLASSIC])[
-                    start_indice[i] : end_indice[i]
-                ]
-            if seq not in seq_list:
+                new_seq = "".join([aa for aa in a3m_lines_list[i][j] if aa in AA_CLASSIC])
+                if only_insert(new_seq[start_indice[i] : end_indice[i]]):
+                    only_insert_num += 1
+                seq += new_seq[start_indice[i] : end_indice[i]]
+            # Check that the sequence is not only composed of insertions
+            if only_insert_num < (len(a3m_lines_list) - 1) and seq not in seq_list:
                 f_out.write(f"{title}\n{seq}\n")
                 seq_list.append(seq)
 
@@ -244,7 +247,7 @@ def create_full_alignement(
         )
 
     print("- Paired alignements")
-    for a3m_line in a3m_lines_mmseqs2_paired:
+    for i, a3m_line in enumerate(a3m_lines_mmseqs2_paired):
         line_list = a3m_line.split("\n")
         print(
             f"seq {i} seq num = {len([line for line in line_list if line.startswith('>') ]):5},  res num ={len(line_list[1]):5}"
