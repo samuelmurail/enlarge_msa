@@ -69,7 +69,7 @@ def write_paired_alignement(f_out, a3m_lines_mmseqs2, start_indice, end_indice):
         if a3m_lines_list[0][j].startswith(">"):
             title = ">"
             for i in range(len(a3m_lines_list)):
-                title += " " + a3m_lines_list[i][j][1:]
+                title += "\t" + a3m_lines_list[i][j][1:]
         elif a3m_lines_list[0][j]:
             seq = ""
             for i in range(len(a3m_lines_list)):
