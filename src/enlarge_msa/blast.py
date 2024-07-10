@@ -340,7 +340,7 @@ def reconstruct(full_rec_seq, unique_rec_seq, new_rec_seq):
                 reconstructed_seq.append(new_seq)    
     return reconstructed_seq
 
-def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_df=False, generate_tmp_rec_df=False):
+def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_df=False, generate_tmp_rec_df=False, generate_mmseq_df=False):
     """
     Perform BLAST analysis.
     This function runs a BLAST analysis on sequences from a DataFrame and generate output files used for mmseqs MSA search. 
@@ -359,12 +359,15 @@ def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_df=False, gener
         Whether to generate temporary output files for peptide sequences (default False).
     generate_tmp_rec_df : bool, optional
         Whether to generate temporary output files for nucleotide sequences (default False).
+    generate_mmseq_df : bool, optional
+        Whether to generate the final mmseq df containing the orginal and the new sequences
+        of receptor and peptide for each pdb strucutre (default False).
 
     Returns
     -------
     pd.DataFrame
-        DataFrame containing additional information where for each pdb, the best sequence 
-        with the highest coverage and length for the receptor and peptide.
+        DataFrame containing containing the orginal and the new sequences
+        of receptor and peptide for each pdb strucutre.
     """
     print("Ruuning blast analysis")
     output_folder = './blast_analysis'
@@ -435,7 +438,7 @@ def blast_analysis(df, db, pep=True, rec=False, generate_tmp_pep_df=False, gener
         mmseq_df["new_pep_seq"]=new_pep_seq
     if rec:
         mmseq_df["new_rec_seq"]=new_rec_seq
-
-    output_mmseq = os.path.join(output_folder, f"mmseq.csv")
-    mmseq_df.to_csv(output_mmseq, index=False)
-    
+    if generate_mmseq_df:
+        output_mmseq = os.path.join(output_folder, f"mmseq.csv")
+        mmseq_df.to_csv(output_mmseq, index=False)
+    return mmseq_df
