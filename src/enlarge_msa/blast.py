@@ -98,7 +98,7 @@ def blast_fasta_generator(rec_seq,pep_seq,pdb):
             file.write(f">rec_{pdb}_{i}\n")
             file.write(seq)
             
-def blasp_launch(fasta, db, output, num_threads, evalue,semaphore):
+def blasp_launch(fasta, db, output, num_threads, evalue,max_runs):
     """
     Launch a BLASTP search.
 
@@ -124,6 +124,7 @@ def blasp_launch(fasta, db, output, num_threads, evalue,semaphore):
     -------
     None
     """
+    semaphore = Semaphore(max_runs)
     with semaphore:
         BLASTP_BIN = shutil.which('blastp')
         if BLASTP_BIN is None:
@@ -164,7 +165,6 @@ def blastp(df, db, evalue, num_threads, pep=True, rec=False, max_runs=5):
     -------
     None
     """
-    semaphore = Semaphore(max_runs)
     tasks_pep = []
     tasks_rec = []
 
@@ -182,14 +182,14 @@ def blastp(df, db, evalue, num_threads, pep=True, rec=False, max_runs=5):
             print(f"Running BLASTp for peptide of: {pdb} \n")
             pep_file_path = os.path.join(fasta_folder, f"pep_{pdb}.fa")
             pep_blast_output=os.path.join(blast_output, f'out_pep_{pdb}.csv')
-            tasks_pep.append((pep_file_path, db, pep_blast_output, num_threads, evalue, semaphore))
+            tasks_pep.append((pep_file_path, db, pep_blast_output, num_threads, evalue, max_runs))
 
         if rec:
             print(f"Running BLASTp for receptors of :{pdb} \n")
             for i, seq in enumerate(rec_seq):
                 rec_file_path = os.path.join(fasta_folder, f"rec_{pdb}_{i}.fa")
                 rec_blast_output=os.path.join(blast_output, f'out_rec_{pdb}_{i}.csv')
-                tasks_rec.append((rec_file_path, db, rec_blast_output, num_threads, evalue, semaphore))
+                tasks_rec.append((rec_file_path, db, rec_blast_output, num_threads, evalue, max_runs))
                 
     with ThreadPoolExecutor(max_workers=max_runs) as executor:
         if pep:
